@@ -1,68 +1,35 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <string.h>
 
-struct Process {
-    int pid;
-    int burst_time;
-    int remaining_time;
-    int waiting_time;
-    int turnaround_time;
-};
-
-void calculateWaitingTurnaroundTime(struct Process processes[], int n) {
-    int total_waiting_time = 0;
-
-    for (int i = 0; i < n; i++) {
-        processes[i].waiting_time = processes[i].turnaround_time - processes[i].burst_time;
-        total_waiting_time += processes[i].waiting_time;
-    }
-}
-
-void displayResults(struct Process processes[], int n) {
-    printf("PID\tBurst Time\tWaiting Time\tTurnaround Time\n");
-    for (int i = 0; i < n; i++) {
-        printf("%d\t%d\t\t%d\t\t%d\n", processes[i].pid, processes[i].burst_time,
-               processes[i].waiting_time, processes[i].turnaround_time);
-    }
-}
+#define SHM_SIZE 1024
 
 int main() {
-    int n, timeQuantum;
-    printf("Enter the number of processes: ");
-    scanf("%d", &n);
+    key_t key = ftok("shmfile", 65);
+    int shmid = shmget(key, SHM_SIZE, IPC_CREAT | 0666);
+    if (shmid == -1) {
+        perror("shmget");
+        exit(1);
+    }
 
-    struct Process processes[n];
+  
+    char *shm_addr = (char *)shmat(shmid, NULL, 0);
+    if (shm_addr == (char *)(-1)) {
+        perror("shmat");
+        exit(1);
+    }
+
+    printf("Enter a message: ");
+    fgets(shm_addr, SHM_SIZE, stdin);
+    shmdt(shm_addr);
+    shm_addr = (char *)shmat(shmid, NULL, 0);
+
     
-    for (int i = 0; i < n; i++) {
-        processes[i].pid = i + 1;
-        printf("Enter burst time for Process %d: ", i + 1);
-        scanf("%d", &processes[i].burst_time);
-        processes[i].remaining_time = processes[i].burst_time;
-    }
-
-    printf("Enter time quantum: ");
-    scanf("%d", &timeQuantum);
-
-    int currentTime = 0;
-    int completed = 0;
-
-    while (completed < n) {
-        for (int i = 0; i < n; i++) {
-            if (processes[i].remaining_time > 0) {
-                if (processes[i].remaining_time <= timeQuantum) {
-                    currentTime += processes[i].remaining_time;
-                    processes[i].remaining_time = 0;
-                    processes[i].turnaround_time = currentTime;
-                    completed++;
-                } else {
-                    currentTime += timeQuantum;
-                    processes[i].remaining_time -= timeQuantum;
-                }
-            }
-        }
-    }
-
-    calculateWaitingTurnaroundTime(processes, n);
-    displayResults(processes, n);
+    printf("Received message: %s", shm_addr);
+    shmdt(shm_addr);
+    shmctl(shmid, IPC_RMID, NULL);
 
     return 0;
 }
